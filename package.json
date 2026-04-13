@@ -1,0 +1,21 @@
+{
+  "name": "securitize-dapp-sample",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Reference implementation of a dApp that reads tokenized-asset metadata from Securitize's public feed and executes swaps/redemptions via DS Protocol smart contracts.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.13.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.1",
+    "vite": "^7.3.1"
+  }
+}

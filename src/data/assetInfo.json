@@ -1,0 +1,198 @@
+{
+  "symbols": ["BUIDL", "ACRED", "VBILL", "STAC", "HLSCOPE"],
+  "assets": {
+    "BUIDL": {
+      "symbol": "BUIDL",
+      "name": "BlackRock USD Institutional Digital Liquidity Fund",
+      "icon": "https://metadata.securitize.io/buidl_logo_512.png",
+      "decimals": 6,
+      "purchaseUrl": "https://id.securitize.io/primary-market/opportunities/341",
+      "chains": [
+        {
+          "blockchain": "ethereum",
+          "chainId": 1,
+          "tokenAddress": "0x7712c34205737192402172409a8F7ccef8aA2AEc",
+          "redemptionAddress": "0x8780Dd016171B91E4Df47075dA0a947959C34200",
+          "onramp": [],
+          "offramp": [
+            { "address": "0x31D3F59Ad4aAC0eeE2247c65EBE8Bf6E9E470a53", "coin": "USDC" },
+            { "address": "0x4580D3c5fFF079BDe60Af9e98B62d4FB031eE0a0", "coin": "USDtb" },
+            { "address": "0x04FB23ef3cb3eB559D0ba096FbFda90241fF8e66", "coin": "RLUSD" }
+          ]
+        },
+        {
+          "blockchain": "avalanche",
+          "chainId": 43114,
+          "tokenAddress": "0x53FC82f14F009009b440a706e31c9021E1196A2F",
+          "redemptionAddress": "0x8780Dd016171B91E4Df47075dA0a947959C34200",
+          "onramp": [],
+          "offramp": []
+        },
+        {
+          "blockchain": "arbitrum",
+          "chainId": 42161,
+          "tokenAddress": "0xA6525Ae43eDCd03dC08E775774dCAbd3bb925872",
+          "redemptionAddress": "0x8780Dd016171B91E4Df47075dA0a947959C34200",
+          "onramp": [],
+          "offramp": []
+        },
+        {
+          "blockchain": "optimism",
+          "chainId": 10,
+          "tokenAddress": "0xa1CDAb15bBA75a80dF4089CaFbA013e376957cF5",
+          "redemptionAddress": "0x8780Dd016171B91E4Df47075dA0a947959C34200",
+          "onramp": [],
+          "offramp": []
+        },
+        {
+          "blockchain": "polygon",
+          "chainId": 137,
+          "tokenAddress": "0x2893Ef551B6dD69F661Ac00F11D93E5Dc5Dc0e99",
+          "redemptionAddress": "0x8780Dd016171B91E4Df47075dA0a947959C34200",
+          "onramp": [],
+          "offramp": []
+        },
+        {
+          "blockchain": "bnb",
+          "chainId": 56,
+          "tokenAddress": "0x2D5BdC96D9C8AabBDB38c9A27398513e7E5ef84F",
+          "redemptionAddress": "0x8780Dd016171B91E4Df47075dA0a947959C34200",
+          "onramp": [],
+          "offramp": []
+        }
+      ]
+    },
+    "ACRED": {
+      "symbol": "ACRED",
+      "name": "Apollo Diversified Credit Securitize Fund",
+      "icon": "https://metadata.securitize.io/acred_logo_512.png",
+      "decimals": 6,
+      "purchaseUrl": "https://id.securitize.io/primary-market/opportunities/378",
+      "chains": [
+        {
+          "blockchain": "ethereum",
+          "chainId": 1,
+          "tokenAddress": "0x17418038ecF73BA4026c4f428547BF099706F27B",
+          "redemptionAddress": "0xbb543C77436645C8b95B64eEc39E3C0d48D4842b",
+          "onramp": [{ "address": "0x368e7478fF8c88C9002c32E1F576fAbe2E9Ddf7B", "coin": "USDC" }],
+          "offramp": []
+        },
+        {
+          "blockchain": "polygon",
+          "chainId": 137,
+          "tokenAddress": "0xFCe60bBc52a5705CeC5B445501FBAf3274Dc43D0",
+          "redemptionAddress": "0xbb543C77436645C8b95B64eEc39E3C0d48D4842b",
+          "onramp": [{ "address": "0x51ffc9F0BAd88c14196EfDc3bB0148C2c91373A6", "coin": "USDC" }],
+          "offramp": []
+        },
+        {
+          "blockchain": "avalanche",
+          "chainId": 43114,
+          "tokenAddress": "0x7C64925002BFA705834B118a923E9911BeE32875",
+          "redemptionAddress": "0xbb543C77436645C8b95B64eEc39E3C0d48D4842b",
+          "onramp": [{ "address": "0x5d7769B5942732320bECEB2161047354c6DEcc22", "coin": "USDC" }],
+          "offramp": []
+        },
+        {
+          "blockchain": "ink",
+          "chainId": 57073,
+          "tokenAddress": "0x53Ad50D3B6FCaCB8965d3A49cB722917C7DAE1F3",
+          "redemptionAddress": "0xbb543C77436645C8b95B64eEc39E3C0d48D4842b",
+          "onramp": [],
+          "offramp": []
+        },
+        {
+          "blockchain": "sei",
+          "chainId": 1329,
+          "tokenAddress": "0xF7FA6725183e603059fc23D95735BF67f72b2d78",
+          "redemptionAddress": "0xbb543C77436645C8b95B64eEc39E3C0d48D4842b",
+          "onramp": [],
+          "offramp": []
+        }
+      ]
+    },
+    "VBILL": {
+      "symbol": "VBILL",
+      "name": "VanEck VBILL",
+      "icon": "https://metadata.securitize.io/vbill_logo_512.png",
+      "decimals": 6,
+      "purchaseUrl": "https://id.securitize.io/primary-market/opportunities/405",
+      "chains": [
+        {
+          "blockchain": "ethereum",
+          "chainId": 1,
+          "tokenAddress": "0x2255718832bC9fD3bE1CaF75084F4803DA14FF01",
+          "redemptionAddress": "0xbb543C77436645C8b95B64eEc39E3C0d48D4842b",
+          "onramp": [{ "address": "0x488EFd3eD474b205A0AaDe3732E4741432cba50B", "coin": "USDC" }],
+          "offramp": [{ "address": "0x1ed617529d80ae87e6611f11d8de8532eced42bc", "coin": "RLUSD" }]
+        },
+        {
+          "blockchain": "avalanche",
+          "chainId": 43114,
+          "tokenAddress": "0x7F4546eF315Efc65336187Fe3765ea779Ac90183",
+          "redemptionAddress": "0xbb543C77436645C8b95B64eEc39E3C0d48D4842b",
+          "onramp": [],
+          "offramp": []
+        },
+        {
+          "blockchain": "bnb",
+          "chainId": 56,
+          "tokenAddress": "0x14d72634328C4D03bBA184A48081Df65F1911279",
+          "redemptionAddress": "",
+          "onramp": [],
+          "offramp": []
+        }
+      ]
+    },
+    "STAC": {
+      "symbol": "STAC",
+      "name": "STAC",
+      "icon": "https://securitize-public-files.s3.us-east-2.amazonaws.com/token_logos_png/STAC.png",
+      "decimals": 6,
+      "purchaseUrl": "https://id.securitize.io/primary-market/opportunities/416",
+      "chains": [
+        {
+          "blockchain": "ethereum",
+          "chainId": 1,
+          "tokenAddress": "0x51C2d74017390CbBd30550179A16A1c28F7210fc",
+          "redemptionAddress": "0xbb543C77436645C8b95B64eEc39E3C0d48D4842b",
+          "onramp": [{ "address": "0xc793b33120E5b74b601b00aF8FE2d30167CEB923", "coin": "USDC" }],
+          "offramp": []
+        }
+      ]
+    },
+    "HLSCOPE": {
+      "symbol": "HLSCOPE",
+      "name": "Hamilton Lane SCOPE",
+      "icon": "https://securitize-public-files.s3.us-east-2.amazonaws.com/token_logos_png/HLSCOPE.png",
+      "decimals": 6,
+      "purchaseUrl": "https://id.securitize.io/primary-market/opportunities/415",
+      "chains": [
+        {
+          "blockchain": "ethereum",
+          "chainId": 1,
+          "tokenAddress": "0xDa2fFA104356688E74D9340519B8C17f00d7752E",
+          "redemptionAddress": "0xbb543C77436645C8b95B64eEc39E3C0d48D4842b",
+          "onramp": [{ "address": "0x5089729A2E2F4C2e88F618d1362A729e16C3F289", "coin": "USDC" }],
+          "offramp": []
+        },
+        {
+          "blockchain": "optimism",
+          "chainId": 10,
+          "tokenAddress": "0x720f86f4B5b5d5d0ea3E5718EC43071d4d05134b",
+          "redemptionAddress": "0xbb543C77436645C8b95B64eEc39E3C0d48D4842b",
+          "onramp": [],
+          "offramp": []
+        },
+        {
+          "blockchain": "polygon",
+          "chainId": 137,
+          "tokenAddress": "0x4C5cA366e26409845624E29B62C388a06961A792",
+          "redemptionAddress": "0xbb543C77436645C8b95B64eEc39E3C0d48D4842b",
+          "onramp": [{ "address": "0x64039f32829c4Fd7530000f051d7A36e64bb03De", "coin": "USDC" }],
+          "offramp": []
+        }
+      ]
+    }
+  }
+}
