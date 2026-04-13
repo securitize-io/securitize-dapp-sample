@@ -50,6 +50,7 @@ securitize-dapp-sample/
 ├── package.json
 ├── vite.config.js                 # minimal Vite config, no middleware
 ├── LICENSE
+├── NOTICE
 ├── README.md
 ├── docs/
 │   └── SECURITIZE_SKILL.md        # deep-dive developer guide
@@ -299,5 +300,22 @@ These are easy to layer on top — start with this code as a base.
 
 ## License
 
-MIT — use it, fork it, modify it. This is intended as a public
-reference implementation.
+Licensed under the [Apache License, Version 2.0](./LICENSE). Fork it,
+modify it, ship it — commercial or not.
+
+### Trademark and brand — *not* licensed
+
+The Apache 2.0 license **does not** grant any right to use Securitize's
+name, logo, or other brand assets (see Section 6 of the License and the
+[`NOTICE`](./NOTICE) file).
+
+In plain English:
+
+- You **may** reference "Securitize" factually to describe what your
+  software does — e.g. "this dApp integrates with the Securitize public
+  feed" — because that's accurate origin/interoperability language.
+- You **may not** name your fork or product anything like "Securitize X",
+  put the Securitize logo on your UI or marketing, or imply endorsement,
+  sponsorship, or affiliation.
+
+Trademark questions: legal@securitize.io.

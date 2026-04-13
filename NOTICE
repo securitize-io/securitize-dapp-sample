@@ -1,0 +1,46 @@
+Securitize dApp Sample
+Copyright 2026 Securitize, Inc.
+
+This product is licensed under the Apache License, Version 2.0
+(see LICENSE). A copy of the License may also be obtained at
+http://www.apache.org/licenses/LICENSE-2.0
+
+----------------------------------------------------------------------
+TRADEMARK AND BRAND NOTICE
+----------------------------------------------------------------------
+
+"Securitize", the Securitize logo, "DS Protocol", and any other
+Securitize product, service, or brand names that appear in this
+repository (collectively, the "Securitize Marks") are trademarks or
+service marks of Securitize, Inc. and/or its affiliates.
+
+Nothing in the Apache License 2.0 that governs this repository grants
+You any right or license to use the Securitize Marks. Section 6 of the
+License expressly excludes any trademark license. The Securitize Marks
+are NOT part of the Work licensed to You.
+
+Without limiting the above, You MAY NOT, without Securitize's prior
+written consent:
+
+  (a) use the name "Securitize", the Securitize logo, or any other
+      Securitize Mark in the name, branding, marketing materials,
+      user interface, or documentation of any derivative work,
+      fork, product, or service;
+
+  (b) suggest, imply, or represent that any derivative work, product,
+      or service is endorsed by, sponsored by, affiliated with, or
+      otherwise connected to Securitize, Inc.;
+
+  (c) register or attempt to register any domain name, trademark,
+      company name, application name, or social media handle that
+      incorporates any Securitize Mark or any confusingly similar
+      variant.
+
+You MAY, without prior consent, factually reference "Securitize" in
+descriptive prose that identifies the origin or interoperability of
+the code (e.g. "this app integrates with the Securitize public
+feed"), provided such reference does not imply endorsement or
+affiliation.
+
+All rights in the Securitize Marks are reserved. Trademark-related
+questions should be directed to legal@securitize.io.
