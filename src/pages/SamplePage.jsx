@@ -183,14 +183,42 @@ async function checkDSRegistry(tokenAddress, walletAddress, provider) {
  * A production app that needs always-fresh data should run a small backend
  * proxy that fetches the feed server-side and forwards the JSON to the
  * browser with proper CORS headers. See README.md for details.
+ *
+ * Filtering: the feed now includes IST (Investor Security Tokens) and CET
+ * (Corporate Equity Tokens) alongside fund tokens. This dApp only shows
+ * funds, so we fetch the IST/CET lists via the ?filter= parameter and
+ * exclude those symbols.
+ *
+ * Sub-tokens: some assets (e.g. BUIDL) return entries for related share
+ * classes (e.g. BUIDL-I) under the same query. These entries have different
+ * symbols and token addresses but share the same chainId. We merge their
+ * on-ramp/off-ramp contracts into the parent asset's chain data, annotating
+ * each ramp with the sub-token's address so the swap flow uses the correct
+ * contract for approvals and output.
  */
 async function fetchLiveAssetInfo() {
+  // ── Step 1: build an exclusion set of IST/CET symbols ───────────────
+  const excludeSymbols = new Set();
+  for (const filter of ['ist', 'cet']) {
+    try {
+      const res = await fetch(`${PUBLIC_FEED_BASE}/asset-info?filter=${filter}`);
+      if (res.ok) {
+        const json = await res.json();
+        (json.data || []).forEach(d => { if (d.symbol) excludeSymbols.add(d.symbol); });
+      }
+    } catch {} // best-effort; if filters fail we still have InstrumentType fallback
+  }
+
+  // ── Step 2: fetch the full symbol list and filter ───────────────────
   const listRes = await fetch(`${PUBLIC_FEED_BASE}/asset-info`);
   if (!listRes.ok) throw new Error(`asset-info list returned ${listRes.status}`);
   const listJson = await listRes.json();
-  const symbols = listJson.symbol || listJson.symbols || [];
-  if (!symbols.length) throw new Error('asset-info list returned no symbols');
+  const allSymbols = listJson.symbol || listJson.symbols || [];
+  if (!allSymbols.length) throw new Error('asset-info list returned no symbols');
 
+  const symbols = allSymbols.filter(s => !excludeSymbols.has(s));
+
+  // ── Step 3: fetch each fund symbol's data ───────────────────────────
   const assets = {};
   for (const sym of symbols) {
     try {
@@ -199,22 +227,57 @@ async function fetchLiveAssetInfo() {
       const json = await res.json();
       const data = json.data || [];
       if (!data.length) continue;
-      const chains = data
-        .filter(d => d.chainId && typeof d.chainId === 'number')
-        .map(d => ({
-          blockchain: d.blockchain,
-          chainId: d.chainId,
-          tokenAddress: d.TokenAddress,
-          redemptionAddress: d.RedemptionWalletAddress || '',
-          onramp: Array.isArray(d.onramp) ? d.onramp : [],
-          offramp: Array.isArray(d.offramp) ? d.offramp : [],
-        }));
+
+      // Belt-and-suspenders: skip if any entry carries an IST/CET type
+      if (data.some(d => d.InstrumentType === 'IST' || d.InstrumentType === 'CET')) continue;
+
+      // Group by chainId, merging sub-token ramps (e.g. BUIDL-I into BUIDL)
+      const chainMap = {};
+      for (const d of data) {
+        if (!d.chainId || typeof d.chainId !== 'number') continue;
+        const cid = d.chainId;
+        const isSubToken = d.symbol !== sym;
+
+        const rawOnramps  = Array.isArray(d.onramp)  ? d.onramp  : [];
+        const rawOfframps = Array.isArray(d.offramp) ? d.offramp : [];
+
+        // Annotate sub-token ramps with their specific token address so the
+        // swap flow can approve and receive the correct ERC-20.
+        const annotateRamp = (r) => isSubToken
+          ? { ...r, tokenAddress: d.TokenAddress, tokenSymbol: d.symbol }
+          : r;
+
+        if (!chainMap[cid]) {
+          chainMap[cid] = {
+            blockchain: d.blockchain,
+            chainId: cid,
+            tokenAddress: isSubToken ? null : d.TokenAddress,
+            redemptionAddress: isSubToken ? '' : (d.RedemptionWalletAddress || ''),
+            onramp:  rawOnramps.map(annotateRamp),
+            offramp: rawOfframps.map(annotateRamp),
+          };
+        } else {
+          // Merge: prefer the primary token's address/redemption
+          if (!isSubToken) {
+            chainMap[cid].tokenAddress = d.TokenAddress;
+            chainMap[cid].redemptionAddress = d.RedemptionWalletAddress || '';
+          }
+          chainMap[cid].onramp.push(...rawOnramps.map(annotateRamp));
+          chainMap[cid].offramp.push(...rawOfframps.map(annotateRamp));
+        }
+      }
+
+      // Only keep chains where we have the primary token address
+      const chains = Object.values(chainMap).filter(ch => ch.tokenAddress);
+
+      // Use the primary token's metadata (not a sub-token's)
+      const primary = data.find(d => d.symbol === sym) || data[0];
       assets[sym] = {
         symbol: sym,
-        name: data[0]?.name || sym,
-        icon: data[0]?.icon || '',
-        decimals: parseInt(data[0]?.decimals) || 6,
-        purchaseUrl: data[0]?.opportunityURL || '',
+        name: primary?.name || sym,
+        icon: primary?.icon || '',
+        decimals: parseInt(primary?.decimals) || 6,
+        purchaseUrl: primary?.opportunityURL || '',
         chains,
       };
     } catch (err) {
@@ -362,6 +425,12 @@ const SwapPanel = ({ chainData, asset, signer, provider, walletAddress }) => {
   const hasRamps = ramps && ramps.length > 0;
   const currentRamp = hasRamps ? ramps[selectedRampIndex] || ramps[0] : null;
 
+  // Sub-token support: when a ramp comes from a related share class (e.g.
+  // BUIDL-I under BUIDL), the ramp entry carries tokenAddress/tokenSymbol
+  // indicating which ERC-20 to approve/receive. Fall back to the primary.
+  const activeTokenAddress = currentRamp?.tokenAddress || chainData.tokenAddress;
+  const activeTokenSymbol  = currentRamp?.tokenSymbol  || asset.symbol;
+
   useEffect(() => {
     if (!currentRamp || !provider) return;
     let cancelled = false;
@@ -379,8 +448,9 @@ const SwapPanel = ({ chainData, asset, signer, provider, walletAddress }) => {
     if (!walletAddress || !provider) return;
     let cancelled = false;
     (async () => {
+      // Use the active token (may be a sub-token like BUIDL-I)
       try {
-        const token = new ethers.Contract(chainData.tokenAddress, ERC20_ABI, provider);
+        const token = new ethers.Contract(activeTokenAddress, ERC20_ABI, provider);
         const bal = await token.balanceOf(walletAddress);
         if (!cancelled) setTokenBalance(bal);
       } catch {}
@@ -393,7 +463,7 @@ const SwapPanel = ({ chainData, asset, signer, provider, walletAddress }) => {
       }
     })();
     return () => { cancelled = true; };
-  }, [walletAddress, provider, stableInfo?.address, chainData.tokenAddress, txStatus]);
+  }, [walletAddress, provider, stableInfo?.address, activeTokenAddress, txStatus]);
 
   // Debounced estimate of the swap output
   useEffect(() => {
@@ -407,7 +477,7 @@ const SwapPanel = ({ chainData, asset, signer, provider, walletAddress }) => {
           const rawAmount = ethers.parseUnits(amount, stableInfo.decimals);
           const rampContract = new ethers.Contract(currentRamp.address, ONRAMP_ABI, provider);
           const [dsTokenAmount] = await rampContract.calculateDsTokenAmount(rawAmount);
-          setEstimatedOut({ value: dsTokenAmount, decimals: asset.decimals, symbol: asset.symbol });
+          setEstimatedOut({ value: dsTokenAmount, decimals: asset.decimals, symbol: activeTokenSymbol });
         } else {
           const rawAmount = ethers.parseUnits(amount, asset.decimals);
           const rampContract = new ethers.Contract(currentRamp.address, OFFRAMP_ABI, provider);
@@ -420,7 +490,7 @@ const SwapPanel = ({ chainData, asset, signer, provider, walletAddress }) => {
       }
     }, 500);
     return () => clearTimeout(timer);
-  }, [amount, mode, currentRamp?.address, provider, stableInfo, asset]);
+  }, [amount, mode, currentRamp?.address, provider, stableInfo, asset, activeTokenSymbol]);
 
   const handleSwap = async () => {
     if (!signer || !currentRamp || !amount || !stableInfo) return;
@@ -450,13 +520,14 @@ const SwapPanel = ({ chainData, asset, signer, provider, walletAddress }) => {
         setAmount('');
       } else {
         // SELL: approve DS token → call offramp.redeem()
+        // Use the active token address (may be a sub-token like BUIDL-I)
         const rawAmount = ethers.parseUnits(amount, asset.decimals);
-        const tokenContract = new ethers.Contract(chainData.tokenAddress, ERC20_ABI, signer);
+        const tokenContract = new ethers.Contract(activeTokenAddress, ERC20_ABI, signer);
         const rampContract = new ethers.Contract(currentRamp.address, OFFRAMP_ABI, signer);
 
         const allowance = await tokenContract.allowance(walletAddress, currentRamp.address);
         if (allowance < rawAmount) {
-          setTxStatus({ type: 'info', msg: `Approving ${asset.symbol} spend…` });
+          setTxStatus({ type: 'info', msg: `Approving ${activeTokenSymbol} spend…` });
           const appTx = await tokenContract.approve(currentRamp.address, rawAmount);
           await appTx.wait();
         }
@@ -478,9 +549,9 @@ const SwapPanel = ({ chainData, asset, signer, provider, walletAddress }) => {
 
   const sourceToken = mode === 'buy'
     ? { symbol: stableInfo?.symbol || currentRamp?.coin || '—', decimals: stableInfo?.decimals || 6, balance: stableBalance }
-    : { symbol: asset.symbol, decimals: asset.decimals, balance: tokenBalance };
+    : { symbol: activeTokenSymbol, decimals: asset.decimals, balance: tokenBalance };
   const destToken = mode === 'buy'
-    ? { symbol: asset.symbol, decimals: asset.decimals }
+    ? { symbol: activeTokenSymbol, decimals: asset.decimals }
     : { symbol: stableInfo?.symbol || currentRamp?.coin || '—', decimals: stableInfo?.decimals || 6 };
 
   return (
@@ -515,7 +586,7 @@ const SwapPanel = ({ chainData, asset, signer, provider, walletAddress }) => {
           borderRadius: 12, padding: 20, textAlign: 'center',
         }}>
           <div style={{ fontSize: '0.95rem', color: C.yellow, fontWeight: 500, marginBottom: 4 }}>
-            No atomic {mode === 'buy' ? 'buy' : 'sell'} available for {asset.symbol}
+            No atomic {mode === 'buy' ? 'buy' : 'sell'} available for {activeTokenSymbol}
           </div>
           <div style={{ fontSize: '0.8rem', color: C.textSecondary }}>
             On this chain, there is no {mode === 'buy' ? 'on-ramp' : 'off-ramp'} contract deployed.
@@ -533,7 +604,11 @@ const SwapPanel = ({ chainData, asset, signer, provider, walletAddress }) => {
                 value={selectedRampIndex}
                 onChange={e => { setSelectedRampIndex(Number(e.target.value)); setEstimatedOut(null); }}
               >
-                {ramps.map((r, i) => <option key={i} value={i}>{r.coin}</option>)}
+                {ramps.map((r, i) => (
+                  <option key={i} value={i}>
+                    {r.coin}{r.tokenSymbol ? ` (via ${r.tokenSymbol})` : ''}
+                  </option>
+                ))}
               </select>
             </div>
           )}
@@ -593,7 +668,7 @@ const SwapPanel = ({ chainData, asset, signer, provider, walletAddress }) => {
             onClick={handleSwap}
             style={btnPrimary(loading || !signer || !amount || Number(amount) <= 0)}
           >
-            {!signer ? 'Connect wallet to swap' : loading ? 'Processing…' : mode === 'buy' ? `Buy ${asset.symbol}` : `Sell ${asset.symbol}`}
+            {!signer ? 'Connect wallet to swap' : loading ? 'Processing…' : mode === 'buy' ? `Buy ${activeTokenSymbol}` : `Sell ${activeTokenSymbol}`}
           </button>
         </>
       )}

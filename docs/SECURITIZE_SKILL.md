@@ -36,11 +36,54 @@ All contract addresses come from the public feed. **Always fetch at runtime; nev
 
 ```
 GET https://public-feed.securitize.io/asset-info
-→ { "symbol": ["BUIDL", "ACRED", "VBILL", "STAC", "HLSCOPE"] }
+→ { "symbol": ["BUIDL", "ACRED", "VBILL", "STAC", "HLSCOPE", "AAPL", "TSLA", ...] }
+```
 
+**The symbol list now includes ISTs and CETs** (stock tokens like AAPL, TSLA alongside fund tokens). Filter them out before iterating:
+
+```
+GET https://public-feed.securitize.io/asset-info?filter=ist   → IST entries
+GET https://public-feed.securitize.io/asset-info?filter=cet   → CET entries
+```
+
+Build an exclusion set from both filter endpoints, then remove those symbols from the main list. Belt-and-suspenders: also check the `InstrumentType` field on each fetched asset (`"IST"` or `"CET"`).
+
+```js
+// Step 1: build exclusion set
+const excludeSymbols = new Set();
+for (const filter of ['ist', 'cet']) {
+  const res = await fetch(`${BASE}/asset-info?filter=${filter}`);
+  if (res.ok) {
+    const json = await res.json();
+    (json.data || []).forEach(d => { if (d.symbol) excludeSymbols.add(d.symbol); });
+  }
+}
+
+// Step 2: filter the main list
+const allSymbols = (await fetch(`${BASE}/asset-info`).then(r => r.json())).symbol || [];
+const fundSymbols = allSymbols.filter(s => !excludeSymbols.has(s));
+```
+
+```
 GET https://public-feed.securitize.io/asset-info?symbol=BUIDL
 → { "message": "Query executed successfully", "data": [...] }
 ```
+
+### Sub-tokens / share classes
+
+Some fund queries return entries for related share classes on the same chain. For example, `?symbol=BUIDL` returns entries for both `BUIDL` and `BUIDL-I` on Ethereum. Each share class has its own `TokenAddress` and its own on-ramp/off-ramp contracts.
+
+When normalizing, detect sub-tokens (entries whose `symbol` differs from the queried symbol), merge their ramps into the parent chain entry, and annotate each merged ramp with `tokenAddress` and `tokenSymbol` so the swap flow approves and receives the correct ERC-20:
+
+```js
+const isSubToken = entry.symbol !== queriedSymbol;
+const annotateRamp = (r) => isSubToken
+  ? { ...r, tokenAddress: entry.TokenAddress, tokenSymbol: entry.symbol }
+  : r;
+// Merge: chainMap[chainId].onramp.push(...rawOnramps.map(annotateRamp));
+```
+
+See `fetchLiveAssetInfo()` in `SamplePage.jsx` for the complete implementation.
 
 **CORS:** The public feed does not serve CORS headers. Fetch it from a backend proxy or server-side route — not directly from the browser. Cache the result to a local JSON file so the app works on cold starts if the fetch fails.
 
@@ -54,7 +97,7 @@ useEffect(() => {
 }, []);
 ```
 
-**Normalize the raw API response** before storing. The raw `data` array should be transformed server-side into a shape keyed by symbol with a structured `chains` array:
+**Normalize the raw API response** before storing. The raw `data` array should be transformed server-side into a shape keyed by symbol with a structured `chains` array. Sub-token ramps carry `tokenAddress` and `tokenSymbol` annotations:
 
 ```js
 // Suggested normalized shape
@@ -72,11 +115,15 @@ useEffect(() => {
           chainId: 1,
           tokenAddress: "0x7712c...",
           redemptionAddress: "0x8780D...",     // from RedemptionWalletAddress
-          onramp:  [{ address: "0x...", coin: "USDC" }],
-          offramp: [{ address: "0x...", coin: "RLUSD" }],
-          rpcURL: "https://mainnet.infura.io/v3/",
-          bridgeAddress: "0x...",
-          wormholeChainId: "2.0",
+          onramp: [
+            // Sub-token ramp — annotated with tokenAddress/tokenSymbol
+            { address: "0x5f94...", coin: "USDC", tokenAddress: "0x6a9D...", tokenSymbol: "BUIDL-I" }
+          ],
+          offramp: [
+            { address: "0x4580...", coin: "USDtb" },   // parent token ramp (no annotation)
+            { address: "0x04FB...", coin: "RLUSD" },
+            { address: "0x6a4D...", coin: "USDC", tokenAddress: "0x6a9D...", tokenSymbol: "BUIDL-I" }
+          ],
         },
         // ...one entry per supported chain
       ]
@@ -106,6 +153,7 @@ const CHAIN_META = {
   42161: { name: 'Arbitrum',  hex: '0xa4b1', color: '#12AAFF' },
   43114: { name: 'Avalanche', hex: '0xa86a', color: '#E84142' },
   1329:  { name: 'Sei',       hex: '0x531',  color: '#9B1D1D' },
+  4217:  { name: 'Tempo',     hex: '0x1079', color: '#00B2FF' },
   57073: { name: 'Ink',       hex: '0xdf11', color: '#7B61FF' },
 };
 
@@ -288,10 +336,14 @@ const hasOfframpContract = Array.isArray(chainData.offramp) && chainData.offramp
 
 Used when `offramp` has entries. Approve the contract to spend DSTokens; it returns stablecoins in the same transaction.
 
+**Sub-token ramps:** If the ramp entry has `tokenAddress` and `tokenSymbol` fields, use `rampEntry.tokenAddress` instead of the parent's `tokenAddress` for approval and balance checks. This happens when a share class (e.g. BUIDL-I) provides the liquidity path.
+
 ```js
 async function redeemViaContract(signer, rampEntry, tokenAddress, amount) {
+  // Use sub-token address if annotated, otherwise the parent token
+  const activeToken   = rampEntry.tokenAddress || tokenAddress;
   const rawAmount     = ethers.parseUnits(amount, 6); // DSToken always 6 decimals
-  const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
+  const tokenContract = new ethers.Contract(activeToken, ERC20_ABI, signer);
   const offramp       = new ethers.Contract(rampEntry.address, OFFRAMP_ABI, signer);
   const walletAddress = await signer.getAddress();
 
@@ -372,13 +424,14 @@ const OFFRAMP_ABI = [
 
 | Chain | chainId | Notes |
 |---|---|---|
-| Ethereum | `1` | Widest ramp coverage; USDC, USDtb, RLUSD |
+| Ethereum | `1` | Widest ramp coverage; USDC (via BUIDL-I), USDtb, RLUSD |
 | Polygon | `137` | USDC onramp for BUIDL, ACRED, HLSCOPE |
 | Avalanche | `43114` | USDC onramp for ACRED, VBILL |
 | Arbitrum | `42161` | BUIDL only |
 | Optimism | `10` | BUIDL, HLSCOPE |
 | BNB | `56` | BUIDL, VBILL — no ramps; transfer-only redemption |
 | Sei | `1329` | ACRED; USDC auto-bridged to Ethereum via Wormhole/CCTPv2 |
+| Tempo | `4217` | BUIDL, BRSRV — new chain added 2026 |
 | Ink | `57073` | ACRED |
 | Solana | `"mainnet-beta"` | Solana mainnet cluster (not a beta network); needs separate wallet adapter |
 | Aptos | absent | `chainId`, `rpcURL`, `nativeCurrency` fields missing from feed |
@@ -398,6 +451,9 @@ Do not assume 6 decimals for stablecoins. Always call `decimals()` on the stable
 | Issue | Detail |
 |---|---|
 | CORS on public feed | No CORS headers — proxy from backend, not directly from browser |
+| IST/CET in symbol list | The main `/asset-info` list now includes stock tokens (AAPL, TSLA, etc.). Use `?filter=ist` and `?filter=cet` to build an exclusion set; also check `InstrumentType` field per entry |
+| Sub-tokens / share classes | `?symbol=BUIDL` returns entries for both BUIDL and BUIDL-I. Merge sub-token ramps into the parent chain entry and annotate with `tokenAddress`/`tokenSymbol` for the swap flow |
+| Sub-token approval target | When a ramp entry has `tokenAddress` (sub-token), approve and interact with THAT token contract, not the parent DSToken |
 | `onramp`/`offramp` polymorphism | Either `""` or `object[]` — always check `Array.isArray()` |
 | BNB USDC decimals | 18, not 6 — always query `decimals()` from the stablecoin contract |
 | Empty `RedemptionWalletAddress` | Observed on VBILL/BNB — guard before use |
@@ -414,6 +470,8 @@ Do not assume 6 decimals for stablecoins. Always call `decimals()` on the stable
 ## dApp Checklist
 
 - [ ] Fetch asset data via a server-side proxy (not directly from browser — CORS)
+- [ ] Filter out IST/CET symbols using `?filter=ist` and `?filter=cet` exclusion sets
+- [ ] Handle sub-token entries (e.g. BUIDL-I): merge ramps into parent chain, annotate with `tokenAddress`/`tokenSymbol`
 - [ ] Cache asset data to JSON for cold-start resilience
 - [ ] Normalize raw feed data: flatten chains, rename fields, guard onramp/offramp
 - [ ] Query stablecoin `decimals()` from the contract — do not assume 6
@@ -437,6 +495,8 @@ Do not assume 6 decimals for stablecoins. Always call `decimals()` on the stable
 |---|---|
 | Public feed — symbol list | `https://public-feed.securitize.io/asset-info` |
 | Public feed — asset info | `https://public-feed.securitize.io/asset-info?symbol={SYMBOL}` |
+| Public feed — IST filter | `https://public-feed.securitize.io/asset-info?filter=ist` |
+| Public feed — CET filter | `https://public-feed.securitize.io/asset-info?filter=cet` |
 | Securitize ID (KYC / onboarding) | `https://id.securitize.io` |
 | Securitize Connect API | `https://connect-gw.securitize.io/api/` |
 | On/Off Ramp contracts repo | `https://github.com/securitize-io/bc-on-off-ramp-sc` |

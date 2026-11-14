@@ -127,13 +127,24 @@ Fastify / Cloudflare Worker.
 
 ### `GET /asset-info`
 
-Returns the list of symbols currently served by the feed.
+Returns the list of symbols currently served by the feed. **Note:** this
+list now includes IST (Investor Security Tokens) and CET (Corporate
+Equity Tokens) alongside fund tokens. Use the `?filter=` parameter
+(see below) to identify and exclude them.
 
 ```json
 {
-  "symbol": ["BUIDL", "ACRED", "VBILL", "HLSCOPE", "STAC", …]
+  "symbol": ["BUIDL", "ACRED", "VBILL", "HLSCOPE", "STAC", "CURR", "AAPL", …]
 }
 ```
+
+### `GET /asset-info?filter=ist` / `GET /asset-info?filter=cet`
+
+Returns entries for a specific instrument type. Useful for building an
+exclusion set — the sample app fetches both lists and removes those
+symbols before iterating the main list.
+
+Each entry includes an `InstrumentType` field (`"IST"` or `"CET"`).
 
 ### `GET /asset-info?symbol=<SYMBOL>`
 
@@ -150,16 +161,24 @@ Returns per-blockchain deployment data for a single asset.
       "blockchain": "ethereum",
       "chainId": 1,
       "TokenAddress": "0x7712c34205737192402172409a8f7ccef8aa2aec",
-      "RedemptionWalletAddress": "0xbb543C77436645C8b95B64eEc39E3C0d48D4842b",
-      "onramp": [
-        { "address": "0x…", "coin": "USDC" }
-      ],
+      "RedemptionWalletAddress": "0x8780Dd016171B91E4Df47075dA0a947959C34200",
+      "onramp": "",
       "offramp": [
-        { "address": "0x…", "coin": "USDC" }
+        { "address": "0x…", "coin": "USDtb" },
+        { "address": "0x…", "coin": "RLUSD" }
       ],
-      "opportunityURL": "https://id.securitize.io/primary-market/opportunities/123",
-      "aum": 12345678.9,
-      "nav": 1.0
+      "opportunityURL": "https://id.securitize.io/primary-market/opportunities/341",
+      "nativeCurrencySymbol": "ETH",
+      "rpcURL": "https://mainnet.infura.io/v3/",
+      "nativeCurrency": { "name": "ETH", "decimals": 18, "symbol": "ETH" }
+    },
+    {
+      "symbol": "BUIDL-I",
+      "blockchain": "ethereum",
+      "chainId": 1,
+      "TokenAddress": "0x6a9DA2D710BB9B700acde7Cb81F10F1fF8C89041",
+      "onramp": [{ "address": "0x…", "coin": "USDC" }],
+      "offramp": [{ "address": "0x…", "coin": "USDC" }]
     },
     { /* …one entry per chain the asset is deployed on… */ }
   ],
@@ -171,20 +190,34 @@ Field notes:
 
 | Field                    | Meaning                                                                                                            |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `symbol`                 | Asset symbol (same as the query parameter)                                                                         |
+| `symbol`                 | Asset or share-class symbol. **May differ from the query parameter** (e.g. `BUIDL-I` under `?symbol=BUIDL`).      |
 | `name`                   | Human-readable fund name                                                                                           |
 | `icon`                   | PNG/SVG logo URL                                                                                                   |
 | `decimals`               | ERC-20 decimals of the DS token (string, parse to int)                                                             |
-| `blockchain`             | Lowercase chain name (e.g. `ethereum`, `polygon`, `avalanche`, `solana`)                                           |
+| `blockchain`             | Lowercase chain name (e.g. `ethereum`, `polygon`, `avalanche`, `solana`, `tempo`)                                  |
 | `chainId`                | Numeric EVM chain id. **Only present for EVM chains.** Non-EVM entries (Solana, Aptos…) are filtered out by the app. |
 | `TokenAddress`           | Address of the DS token (ERC-20) on this chain                                                                     |
 | `RedemptionWalletAddress`| Fund wallet that receives tokens when an investor redeems off-chain (may be empty)                                 |
-| `onramp`                 | Array of `{ address, coin }` entries for atomic buy contracts. Empty array when no on-ramp is deployed on this chain. |
-| `offramp`                | Array of `{ address, coin }` entries for atomic sell contracts. Empty array when no off-ramp is deployed.          |
+| `onramp`                 | Array of `{ address, coin }` entries for atomic buy contracts. **Empty string `""` (not array)** when no on-ramp is deployed. |
+| `offramp`                | Array of `{ address, coin }` entries for atomic sell contracts. **Empty string `""` (not array)** when no off-ramp is deployed. |
 | `opportunityURL`         | Public primary-market page where a non-whitelisted investor can register                                           |
-| `aum`, `nav`             | Assets under management (USD) and net asset value; handy for dashboards, not used by this sample                   |
+| `InstrumentType`         | Present on IST/CET entries: `"IST"` or `"CET"`. Absent on fund tokens.                                            |
+| `nativeCurrencySymbol`   | Native gas token symbol for the chain                                                                              |
+| `rpcURL`                 | RPC endpoint base URL for the chain                                                                                |
+| `nativeCurrency`         | Object with `name`, `decimals`, `symbol` of the chain's native token                                              |
+| `BridgeAddress`          | Wormhole bridge contract (if cross-chain bridging is available)                                                    |
 
 `result` at the top level is the aggregate AUM of the asset across all chains.
+
+#### Sub-tokens / share classes
+
+Some fund queries return entries for related share classes alongside the
+primary token. For example, `?symbol=BUIDL` returns entries for both
+`BUIDL` and `BUIDL-I` on the same chain. Each share class has its own
+`TokenAddress` and its own on-ramp/off-ramp contracts. The sample app
+merges these into the parent asset's chain data and annotates each ramp
+with the sub-token's address so the swap flow approves and receives the
+correct ERC-20. See `fetchLiveAssetInfo()` in `SamplePage.jsx`.
 
 ### `GET /asset-stats` (optional)
 
@@ -210,18 +243,24 @@ sample app consumes directly:
   "assets": {
     "BUIDL": {
       "symbol": "BUIDL",
-      "name": "BlackRock USD Institutional Digital Liquidity Fund",
+      "name": "BlackRock USD Institutional Digital Liquidity Fund Ltd. (\"BUIDL\")",
       "icon": "https://…",
       "decimals": 6,
-      "purchaseUrl": "https://id.securitize.io/primary-market/opportunities/123",
+      "purchaseUrl": "https://id.securitize.io/primary-market/opportunities/341",
       "chains": [
         {
           "blockchain": "ethereum",
           "chainId": 1,
-          "tokenAddress": "0x…",
-          "redemptionAddress": "0x…",
-          "onramp": [{ "address": "0x…", "coin": "USDC" }],
-          "offramp": [{ "address": "0x…", "coin": "USDC" }]
+          "tokenAddress": "0x7712…",
+          "redemptionAddress": "0x8780…",
+          "onramp": [
+            { "address": "0x5f94…", "coin": "USDC", "tokenAddress": "0x6a9D…", "tokenSymbol": "BUIDL-I" }
+          ],
+          "offramp": [
+            { "address": "0x4580…", "coin": "USDtb" },
+            { "address": "0x04FB…", "coin": "RLUSD" },
+            { "address": "0x6a4D…", "coin": "USDC", "tokenAddress": "0x6a9D…", "tokenSymbol": "BUIDL-I" }
+          ]
         }
       ]
     }
